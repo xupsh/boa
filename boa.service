@@ -1,0 +1,11 @@
+[Unit]
+Description=BOA Server
+
+[Service]
+Restart=always
+ExecStart=/usr/bin/boa -d
+ExecStop=/bin/kill -TERM $MAINPID
+SyslogIdentifier=boa
+
+[Install]
+WantedBy=multi-user.target
