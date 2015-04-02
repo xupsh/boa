@@ -34,10 +34,10 @@ You can run `install.sh` as root simply. The script will do the following steps:
 	* `/usr/lib/cgi-bin`
 	* `/usr/lib/boa`
 * Copy `boa` into `/usr/local/bin`
-* Copy `boa_indexer` into `/usr/lib/boa`
+* Copy `boa_indexer` into `/usr/boa`
 * Copy `boa.conf` into `/etc/boa`.
 * Make sure that `/etc/mime.types` is available.
-* If `systemd` is detected, register `boa.service`.
+* If `systemd` is detected, register `boa.service` (copy it into `/lib/systemd/system`).
 
 ### About systemd
 
