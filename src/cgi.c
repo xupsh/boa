@@ -226,6 +226,7 @@ int complete_env(request * req)
         my_add_cgi_env(req, "PATH_TRANSLATED", req->path_translated);
 
     my_add_cgi_env(req, "SCRIPT_NAME", req->script_name);
+    my_add_cgi_env(req, "SCRIPT_FILENAME", req->pathname);
 
     if (req->query_string)
         my_add_cgi_env(req, "QUERY_STRING", req->query_string);
