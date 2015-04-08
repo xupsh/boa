@@ -79,98 +79,162 @@ int process_cgi_header(request * req)
             req->header_line = c + 1;
         return 1;
     }
-    if (!strncasecmp(buf, "Status: ", 8)) {
-        req->header_line--;
-        memcpy(req->header_line, "HTTP/1.0 ", 9);
-    } else if (!strncasecmp(buf, "Location: ", 10)) { /* got a location header */
-#ifdef FASCIST_LOGGING
 
-        log_error_time();
-        fprintf(stderr, "%s:%d - found Location header \"%s\"\n",
-                __FILE__, __LINE__, buf + 10);
-#endif
-
-
-        if (buf[10] == '/') {   /* virtual path */
-            log_error_time();
-            fprintf(stderr,
-                    "server does not support internal redirection: " \
-                    "\"%s\"\n", buf + 10);
-            send_r_bad_request(req);
-
-            /*
-             * We (I, Jon) have declined to support absolute-path parsing
-             * because I see it as a major security hole.
-             * Location: /etc/passwd or Location: /etc/shadow is not funny.
-             *
-             * Also, the below code is borked.
-             * request_uri could contain /cgi-bin/bob/extra_path
-             */
-
-            /*
-               strcpy(req->request_uri, buf + 10);
-               return internal_redirect(req);
-             */
-        } else {                /* URL */
-            char *c2;
-            c2 = strchr(buf + 10, '\n');
-            /* c2 cannot ever equal NULL here because we already have found one */
-
-            --c2;
-            while (*c2 == '\r')
-                --c2;
-            ++c2;
-            /* c2 now points to a '\r' or the '\n' */
-            *c2++ = '\0';       /* end header */
-
-            /* first next header, or is at req->header_end */
-            while ((*c2 == '\n' || *c2 == '\r') && c2 < req->header_end)
-                ++c2;
-            if (c2 == req->header_end)
-                send_r_moved_temp(req, buf + 10, "");
-            else
-                send_r_moved_temp(req, buf + 10, c2);
-        }
-        req->status = DONE;
-        return 1;
-    } else {                    /* not location and not status */
-        char *dest;
-        int howmuch;
-        send_r_request_ok(req); /* does not terminate */
-        /* got to do special things because
-           a) we have a single buffer divided into 2 pieces
-           b) we need to merge those pieces
-           Easiest way is to memmove the cgi data backward until
-           it touches the buffered data, then reset the cgi data pointers
+    // FIXED: CGI Header for Status & Location
+    while (1) {
+        int len;
+        char *pnext = NULL;
+        char *ptmp = NULL;
+        
+        /* not find HTTP header tailer */
+        if (NULL == (pnext=strchr(buf, '\n')))        /* has no '\n' */
+            break;
+                
+        /* the length of this line,  
+         * include '\n'
          */
-        dest = req->buffer + req->buffer_end;
-        if (req->method == M_HEAD) {
-            if (*(c + 1) == '\r')
-                req->header_end = c + 2;
-            else
-                req->header_end = c + 1;
-            req->cgi_status = CGI_DONE;
-        }
-        howmuch = req->header_end - req->header_line;
+        len = pnext - buf + 1; 
+        
+        if (!strncasecmp(buf, "Status: ", 8)) {
+        
+            if (buf != req->header_line) {                    
+                if (NULL == (ptmp=(char *)malloc(len))) {
+                    log_error_time();
+                    perror("malloc");
+                    send_r_error(req);
+                    return 0;
+                }
 
-        if (dest + howmuch > req->buffer + BUFFER_SIZE) {
-            /* big problem */
+                /* move Status: to line header */
+                memcpy(ptmp, buf, len);
+                memmove(req->header_line+len, req->header_line, buf-req->header_line);       
+                memcpy(req->header_line, ptmp, len);
+                free(ptmp);
+            }
+
+            req->header_line--;
+            memcpy(req->header_line, "HTTP/1.0 ", 9);
+            return 1;
+
+        } else if (!strncasecmp(buf, "Location: ", 10)) { /* got a location header */
+        
+            if (buf != req->header_line) {                    
+                if (NULL == (ptmp=(char *)malloc(len))) {
+                    log_error_time();
+                    perror("malloc");
+                    send_r_error(req);
+                    return 0;
+                }
+
+                /* move Status: to line header */
+                memcpy(ptmp, buf, len);
+                memmove(req->header_line+len, req->header_line, buf-req->header_line);       
+                memcpy(req->header_line, ptmp, len);
+                free(ptmp);
+            }
+            
+            /* force pointer header */
+            buf = req->header_line;
+                    
+    #ifdef FASCIST_LOGGING
+    
             log_error_time();
-            fprintf(stderr, "Too much data to move! Aborting! %s %d\n",
-                    __FILE__, __LINE__);
-            /* reset buffer pointers because we already called
-               send_r_request_ok... */
-            req->buffer_start = req->buffer_end = 0;
-            send_r_error(req);
-            return 0;
+            fprintf(stderr, "%s:%d - found Location header \"%s\"\n",
+                    __FILE__, __LINE__, buf + 10);
+    #endif
+    
+    
+            if (buf[10] == '/') {   /* virtual path */
+                log_error_time();
+                fprintf(stderr,
+                        "server does not support internal redirection: " \
+                        "\"%s\"\n", buf + 10);
+                send_r_bad_request(req);
+    
+                /*
+                 * We (I, Jon) have declined to support absolute-path parsing
+                 * because I see it as a major security hole.
+                 * Location: /etc/passwd or Location: /etc/shadow is not funny.
+                 *
+                 * Also, the below code is borked.
+                 * request_uri could contain /cgi-bin/bob/extra_path
+                 */
+    
+                /*
+                   strcpy(req->request_uri, buf + 10);
+                   return internal_redirect(req);
+                 */
+            } else {                /* URL */
+                char *c2;
+                c2 = strchr(buf + 10, '\n');
+                /* c2 cannot ever equal NULL here because we already have found one */
+    
+                --c2;
+                while (*c2 == '\r')
+                    --c2;
+                ++c2;
+                /* c2 now points to a '\r' or the '\n' */
+                *c2++ = '\0';       /* end header */
+    
+                /* first next header, or is at req->header_end */
+                while ((*c2 == '\n' || *c2 == '\r') && c2 < req->header_end)
+                    ++c2;
+                if (c2 == req->header_end)
+                    send_r_moved_temp(req, buf + 10, "");
+                else
+                    send_r_moved_temp(req, buf + 10, c2);
+            }
+            req->status = DONE;
+            return 1;
         }
-        memmove(dest, req->header_line, howmuch);
-        req->buffer_end += howmuch;
-        req->header_line = req->buffer + req->buffer_end;
-        req->header_end = req->header_line;
-        req_flush(req);
-        if (req->method == M_HEAD)
-            return 0;
+        
+        /* pointer to next line */
+        buf = pnext + 1;
+        
+        /* reach the end of HTTP header */
+        if ('\0' == buf[0] || '\n' == buf[0] || '\r' == buf[0])
+            break;
     }
+                            
+    /* not location and not status */
+    char *dest;
+    int howmuch;
+    send_r_request_ok(req); /* does not terminate */
+    /* got to do special things because
+       a) we have a single buffer divided into 2 pieces
+       b) we need to merge those pieces
+       Easiest way is to memmove the cgi data backward until
+       it touches the buffered data, then reset the cgi data pointers
+     */
+    dest = req->buffer + req->buffer_end;
+    if (req->method == M_HEAD) {
+        if (*(c + 1) == '\r')
+            req->header_end = c + 2;
+        else
+            req->header_end = c + 1;
+        req->cgi_status = CGI_DONE;
+    }
+    howmuch = req->header_end - req->header_line;
+
+    if (dest + howmuch > req->buffer + BUFFER_SIZE) {
+        /* big problem */
+        log_error_time();
+        fprintf(stderr, "Too much data to move! Aborting! %s %d\n",
+                __FILE__, __LINE__);
+        /* reset buffer pointers because we already called
+           send_r_request_ok... */
+        req->buffer_start = req->buffer_end = 0;
+        send_r_error(req);
+        return 0;
+    }
+    memmove(dest, req->header_line, howmuch);
+    req->buffer_end += howmuch;
+    req->header_line = req->buffer + req->buffer_end;
+    req->header_end = req->header_line;
+    req_flush(req);
+    if (req->method == M_HEAD)
+        return 0;
+ 
+
     return 1;
 }
